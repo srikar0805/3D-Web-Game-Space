@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mars Colony Builder 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;overflow:hidden;background:#000}
+
+#startScreen{
+  position:fixed;
+  inset:0;
+  background:linear-gradient(135deg,#0a0510,#1e0f0a);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+
+#startScreen h1{
+  font-size:60px;
+  color:#ff6432;
+  margin-bottom:20px;
+  text-shadow:0 0 30px rgba(255,100,50,0.9);
+}
+
+#startScreen p{
+  font-size:20px;
+  color:#ccc;
+  max-width:700px;
+  text-align:center;
+  margin-bottom:40px;
+  line-height:1.6;
+}
+
+#startBtn{
+  padding:25px 70px;
+  font-size:28px;
+  font-weight:900;
+  background:linear-gradient(135deg,#ff6432,#d84315);
+  color:#fff;
+  border:4px solid #ffab91;
+  border-radius:20px;
+  cursor:pointer;
+  box-shadow:0 0 50px rgba(255,100,50,0.7);
+  transition:all 0.3s;
+  text-transform:uppercase;
+}
+
+#startBtn:hover{
+  transform:scale(1.1);
+  box-shadow:0 0 70px rgba(255,100,50,1);
+}
+
+#startBtn:active{
+  transform:scale(1.05);
+}
+
+#hud{
+  position:fixed;
+  top:20px;
+  left:20px;
+  right:20px;
+  display:flex;
+  justify-content:space-between;
+  z-index:10;
+  pointer-events:none;
+}
+
+.hud-panel{
+  background:rgba(10,10,20,0.9);
+  border:2px solid rgba(255,120,80,0.7);
+  border-radius:15px;
+  padding:15px 20px;
+  backdrop-filter:blur(15px);
+  pointer-events:auto;
+}
+
+.resources{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:15px;
+}
+
+.resource{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:#fff;
+  font-size:16px;
+  font-weight:700;
+}
+
+.resource-icon{font-size:24px}
+
+#buildMenu{
+  position:fixed;
+  right:20px;
+  top:50%;
+  transform:translateY(-50%);
+  background:rgba(10,10,20,0.95);
+  border:2px solid rgba(255,120,80,0.7);
+  border-radius:15px;
+  padding:20px;
+  max-width:240px;
+  z-index:10;
+  max-height:80vh;
+  overflow-y:auto;
+}
+
+#buildMenu h3{
+  color:#ff6432;
+  font-size:20px;
+  text-align:center;
+  margin-bottom:15px;
+}
+
+.build-category{margin-bottom:20px}
+
+.category-title{
+  font-size:12px;
+  color:#ffab91;
+  margin-bottom:10px;
+  font-weight:700;
+  text-transform:uppercase;
+}
+
+.build-btn{
+  width:100%;
+  cursor:pointer;
+  background:linear-gradient(135deg,#2c3e50,#1a252f);
+  border:2px solid #546e7a;
+  color:#fff;
+  padding:12px;
+  margin-bottom:8px;
+  border-radius:10px;
+  font-weight:700;
+  font-size:14px;
+  transition:all 0.2s;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.build-btn:hover{
+  transform:translateX(-5px);
+  border-color:#ff6432;
+  box-shadow:0 0 20px rgba(255,100,50,0.5);
+}
+
+.build-btn.selected{
+  background:linear-gradient(135deg,#ff6432,#d84315);
+  border-color:#ffab91;
+}
+
+#info{
+  position:fixed;
+  bottom:20px;
+  left:20px;
+  background:rgba(10,10,20,0.95);
+  border:2px solid rgba(255,120,80,0.7);
+  border-radius:15px;
+  padding:15px 20px;
+  max-width:450px;
+  z-index:10;
+  color:#fff;
+}
+
+#info h4{color:#ff6432;margin-bottom:8px}
+#info p{font-size:14px;line-height:1.6;color:#ccc}
+
+#toast{
+  position:fixed;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  background:rgba(0,0,0,0.98);
+  border:4px solid #ff6432;
+  padding:30px 50px;
+  border-radius:20px;
+  font-size:28px;
+  font-weight:900;
+  color:#fff;
+  opacity:0;
+  transition:opacity 0.3s;
+  pointer-events:none;
+  z-index:30;
+  text-align:center;
+}
+
+canvas{display:block}
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>🔴 MARS COLONY</h1>
+  <p>Build and manage a thriving colony on the Red Planet. Place habitats, farms, power plants, and spaceports. Watch cargo ships arrive and depart. Your colonists are counting on you!</p>
+  <button id="startBtn">Launch Mission</button>
+</div>
+
+<div id="hud" style="display:none">
+  <div class="hud-panel">
+    <div class="resources">
+      <div class="resource">
+        <span class="resource-icon">👥</span>
+        <div>
+          <div style="font-size:12px;opacity:0.7">Population</div>
+          <div id="pop">0</div>
+        </div>
+      </div>
+      <div class="resource">
+        <span class="resource-icon">💰</span>
+        <div>
+          <div style="font-size:12px;opacity:0.7">Credits</div>
+          <div id="credits">1000</div>
+        </div>
+      </div>
+      <div class="resource">
+        <span class="resource-icon">⚡</span>
+        <div>
+          <div style="font-size:12px;opacity:0.7">Energy</div>
+          <div id="energy">0/0</div>
+        </div>
+      </div>
+      <div class="resource">
+        <span class="resource-icon">🌾</span>
+        <div>
+          <div style="font-size:12px;opacity:0.7">Food</div>
+          <div id="food">100</div>
+        </div>
+      </div>
+      <div class="resource">
+        <span class="resource-icon">💧</span>
+        <div>
+          <div style="font-size:12px;opacity:0.7">Water</div>
+          <div id="water">80</div>
+        </div>
+      </div>
+      <div class="resource">
+        <span class="resource-icon">🔬</span>
+        <div>
+          <div style="font-size:12px;opacity:0.7">Research</div>
+          <div id="research">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="hud-panel">
+    <div style="font-size:16px;color:#fff">Sol <span id="day" style="font-weight:900;color:#ff6432">1</span></div>
+    <div style="font-size:12px;opacity:0.7;margin-top:6px;color:#fff">FPS: <span id="fps">60</span></div>
+  </div>
+</div>
+
+<div id="buildMenu" style="display:none">
+  <h3>🏗️ BUILD</h3>
+  <div class="build-category">
+    <div class="category-title">🛣️ Infrastructure</div>
+    <button class="build-btn" data-type="road"><span>Road</span><span style="font-size:12px">💰10</span></button>
+    <button class="build-btn" data-type="power"><span>Power Line</span><span style="font-size:12px">💰15</span></button>
+  </div>
+  <div class="build-category">
+    <div class="category-title">🏠 Residential</div>
+    <button class="build-btn" data-type="habitat"><span>Habitat</span><span style="font-size:12px">💰100</span></button>
+    <button class="build-btn" data-type="apartment"><span>Apartment</span><span style="font-size:12px">💰200</span></button>
+    <button class="build-btn" data-type="dome"><span>Bio Dome</span><span style="font-size:12px">💰350</span></button>
+  </div>
+  <div class="build-category">
+    <div class="category-title">⚡ Energy</div>
+    <button class="build-btn" data-type="solar"><span>Solar Array</span><span style="font-size:12px">💰80</span></button>
+    <button class="build-btn" data-type="reactor"><span>Reactor</span><span style="font-size:12px">💰250</span></button>
+  </div>
+  <div class="build-category">
+    <div class="category-title">🌾 Resources</div>
+    <button class="build-btn" data-type="farm"><span>Farm</span><span style="font-size:12px">💰120</span></button>
+    <button class="build-btn" data-type="water"><span>Water Plant</span><span style="font-size:12px">💰90</span></button>
+    <button class="build-btn" data-type="mine"><span>Mine</span><span style="font-size:12px">💰150</span></button>
+  </div>
+  <div class="build-category">
+    <div class="category-title">🚀 Advanced</div>
+    <button class="build-btn" data-type="lab"><span>Lab</span><span style="font-size:12px">💰220</span></button>
+    <button class="build-btn" data-type="spaceport"><span>Spaceport</span><span style="font-size:12px">💰400</span></button>
+  </div>
+</div>
+
+<div id="info" style="display:none">
+  <h4>🔴 Welcome to Mars!</h4>
+  <p>Select a building from the menu and click on the grid to place it. Build roads to connect structures. Watch spaceships fly overhead!</p>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/three@0.157.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.157.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+console.log('=== GAME STARTING ===');
+
+// Get start button FIRST before anything else
+const startBtn = document.getElementById('startBtn');
+const startScreen = document.getElementById('startScreen');
+
+console.log('Start button:', startBtn);
+console.log('Start screen:', startScreen);
+
+// Add click handler IMMEDIATELY
+startBtn.addEventListener('click', function() {
+  console.log('BUTTON CLICKED!!!');
+  startScreen.style.display = 'none';
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('buildMenu').style.display = 'block';
+  document.getElementById('info').style.display = 'block';
+  gameState.started = true;
+  showToast('Colony established! Start building!', 2500);
+});
+
+console.log('Button listener attached');
+
+// ========== GAME CONFIG ==========
+const BUILDINGS = {
+  road: { name: 'Road', cost: 10, size: 1, height: 0.1, color: 0x2a2a2a, prod: {} },
+  power: { name: 'Power Line', cost: 15, size: 1, height: 1.5, color: 0xffeb3b, prod: {} },
+  habitat: { name: 'Habitat', cost: 100, size: 2, height: 3, color: 0x4fc3f7, prod: {pop:10, energy:-4, food:-3, water:-3} },
+  apartment: { name: 'Apartment', cost: 200, size: 3, height: 6, color: 0x29b6f6, prod: {pop:30, energy:-10, food:-8, water:-8} },
+  dome: { name: 'Bio Dome', cost: 350, size: 4, height: 5, color: 0x66bb6a, prod: {pop:50, food:10, energy:-15, water:-10} },
+  solar: { name: 'Solar Array', cost: 80, size: 2, height: 1.5, color: 0x1976d2, prod: {energy:20} },
+  reactor: { name: 'Reactor', cost: 250, size: 3, height: 4, color: 0x00e676, prod: {energy:80, credits:-5} },
+  farm: { name: 'Farm', cost: 120, size: 2, height: 2.5, color: 0x66bb6a, prod: {food:15, energy:-4, water:-5} },
+  water: { name: 'Water Plant', cost: 90, size: 2, height: 2, color: 0x26c6da, prod: {water:12, energy:-3} },
+  mine: { name: 'Mine', cost: 150, size: 2, height: 3, color: 0xffa726, prod: {credits:10, energy:-5} },
+  lab: { name: 'Lab', cost: 220, size: 2, height: 3.5, color: 0xec407a, prod: {research:8, energy:-8, credits:-4} },
+  spaceport: { name: 'Spaceport', cost: 400, size: 5, height: 6, color: 0xab47bc, prod: {credits:25, energy:-12} }
+};
+
+// ========== GAME STATE ==========
+const gameState = {
+  credits: 1000,
+  energy: 0,
+  energyCap: 0,
+  food: 100,
+  water: 80,
+  pop: 0,
+  research: 0,
+  day: 1,
+  time: 0,
+  lastTick: 0,
+  selectedType: null,
+  buildings: [],
+  started: false,
+  fpsBuf: []
+};
+
+// ========== UI FUNCTIONS ==========
+function showToast(msg, duration = 1500) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  setTimeout(() => toast.style.opacity = '0', duration);
+}
+
+function updateHUD() {
+  document.getElementById('pop').textContent = Math.floor(gameState.pop);
+  document.getElementById('credits').textContent = Math.floor(gameState.credits);
+  document.getElementById('energy').textContent = `${Math.floor(gameState.energy)}/${Math.floor(gameState.energyCap)}`;
+  document.getElementById('food').textContent = Math.floor(gameState.food);
+  document.getElementById('water').textContent = Math.floor(gameState.water);
+  document.getElementById('research').textContent = Math.floor(gameState.research);
+  document.getElementById('day').textContent = gameState.day;
+}
+
+function updateInfo(title, desc) {
+  document.getElementById('info').innerHTML = `<h4>${title}</h4><p>${desc}</p>`;
+}
+
+// ========== THREE.JS SETUP ==========
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050510);
+scene.fog = new THREE.Fog(0x1a0f0f, 60, 250);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(40, 50, 40);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+console.log('Renderer created');
+
+// ========== CONTROLS ==========
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 20;
+controls.maxDistance = 150;
+controls.maxPolarAngle = Math.PI / 2.1;
+
+// ========== LIGHTING ==========
+const ambientLight = new THREE.AmbientLight(0xffccaa, 0.4);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffd4a3, 1.8);
+sunLight.position.set(80, 120, 60);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.left = -80;
+sunLight.shadow.camera.right = 80;
+sunLight.shadow.camera.top = 80;
+sunLight.shadow.camera.bottom = -80;
+scene.add(sunLight);
+
+// ========== STARFIELD ==========
+const starGeometry = new THREE.BufferGeometry();
+const starVertices = [];
+for (let i = 0; i < 5000; i++) {
+  starVertices.push(
+    (Math.random() - 0.5) * 800,
+    Math.random() * 400 + 50,
+    (Math.random() - 0.5) * 800
+  );
+}
+starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+const stars = new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: 0xffffff, size: 0.5 }));
+scene.add(stars);
+
+// ========== TERRAIN ==========
+const groundSize = 150;
+const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize, 80, 80);
+const positions = groundGeo.attributes.position;
+for (let i = 0; i < positions.count; i++) {
+  const x = positions.getX(i);
+  const y = positions.getY(i);
+  const noise = Math.sin(x * 0.08) * Math.cos(y * 0.08) * 1.2;
+  positions.setZ(i, noise);
+}
+groundGeo.computeVertexNormals();
+
+const ground = new THREE.Mesh(
+  groundGeo,
+  new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.95 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ========== GRID ==========
+const GRID_SIZE = 40;
+const TILE_SIZE = 3;
+const tiles = [];
+const tileMap = new Map();
+
+const gridHelper = new THREE.GridHelper(GRID_SIZE * TILE_SIZE, GRID_SIZE, 0x555555, 0x333333);
+gridHelper.position.y = 0.02;
+scene.add(gridHelper);
+
+const tileGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.95, TILE_SIZE * 0.95);
+for (let x = -GRID_SIZE / 2; x < GRID_SIZE / 2; x++) {
+  for (let z = -GRID_SIZE / 2; z < GRID_SIZE / 2; z++) {
+    const tile = new THREE.Mesh(
+      tileGeo,
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, side: THREE.DoubleSide })
+    );
+    tile.rotation.x = -Math.PI / 2;
+    tile.position.set(x * TILE_SIZE + TILE_SIZE / 2, 0.05, z * TILE_SIZE + TILE_SIZE / 2);
+    tile.userData = { gridX: x, gridZ: z, building: null };
+    scene.add(tile);
+    tiles.push(tile);
+    tileMap.set(`${x},${z}`, tile);
+  }
+}
+
+console.log('Grid created:', tiles.length, 'tiles');
+
+// ========== SPACESHIPS ==========
+const spaceships = [];
+
+function createSpaceship() {
+  const ship = new THREE.Group();
+  
+  const bodyGeo = new THREE.ConeGeometry(1, 4, 8);
+  const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8 }));
+  body.rotation.x = Math.PI / 2;
+  ship.add(body);
+  
+  const wingGeo = new THREE.BoxGeometry(4, 0.2, 1);
+  const wings = new THREE.Mesh(wingGeo, new THREE.MeshStandardMaterial({ color: 0x888888 }));
+  wings.position.z = -0.5;
+  ship.add(wings);
+  
+  const engineGeo = new THREE.SphereGeometry(0.4, 8, 8);
+  const engineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8 });
+  const engine1 = new THREE.Mesh(engineGeo, engineMat);
+  engine1.position.set(-1.5, 0, -2);
+  const engine2 = new THREE.Mesh(engineGeo, engineMat.clone());
+  engine2.position.set(1.5, 0, -2);
+  ship.add(engine1, engine2);
+  
+  ship.userData = {
+    speed: 0.3 + Math.random() * 0.2,
+    angle: Math.random() * Math.PI * 2,
+    height: 30 + Math.random() * 20,
+    radius: 60 + Math.random() * 40,
+    engines: [engine1, engine2]
+  };
+  
+  scene.add(ship);
+  spaceships.push(ship);
+}
+
+for (let i = 0; i < 3; i++) {
+  setTimeout(() => createSpaceship(), i * 3000);
+}
+
+function updateSpaceships(dt) {
+  spaceships.forEach(ship => {
+    const data = ship.userData;
+    data.angle += dt * data.speed * 0.1;
+    ship.position.x = Math.cos(data.angle) * data.radius;
+    ship.position.z = Math.sin(data.angle) * data.radius;
+    ship.position.y = data.height;
+    ship.lookAt(0, data.height, 0);
+    
+    data.engines.forEach(engine => {
+      engine.material.opacity = 0.6 + Math.sin(Date.now() * 0.01) * 0.2;
+    });
+  });
+}
+
+// ========== BUILDING CREATION ==========
+function createBuildingMesh(type) {
+  const cfg = BUILDINGS[type];
+  const group = new THREE.Group();
+  
+  if (type === 'road') {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(TILE_SIZE * 0.9, cfg.height, TILE_SIZE * 0.9),
+      new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.8 })
+    );
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  
+  else if (type === 'power') {
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.15, cfg.height, 8),
+      new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7 })
+    );
+    pole.position.y = cfg.height / 2;
+    pole.castShadow = true;
+    group.add(pole);
+    
+    const wire = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 0.5, 6),
+      new THREE.MeshStandardMaterial({ color: cfg.color, emissive: cfg.color, emissiveIntensity: 0.6 })
+    );
+    wire.position.y = cfg.height;
+    wire.rotation.z = Math.PI / 2;
+    group.add(wire);
+  }
+  
+  else if (type === 'habitat') {
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(cfg.size * 0.45, cfg.size * 0.45, cfg.height, 16),
+      new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.4, metalness: 0.6 })
+    );
+    body.position.y = cfg.height / 2;
+    body.castShadow = true;
+    group.add(body);
+    
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const window = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4, 0.5, 0.1),
+        new THREE.MeshStandardMaterial({ color: 0xffeb3b, emissive: 0xffeb3b, emissiveIntensity: 0.8 })
+      );
+      window.position.x = Math.cos(angle) * (cfg.size * 0.46);
+      window.position.z = Math.sin(angle) * (cfg.size * 0.46);
+      window.position.y = cfg.height * 0.6;
+      window.lookAt(0, window.position.y, 0);
+      group.add(window);
+    }
+  }
+  
+  else if (type === 'apartment') {
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(cfg.size * 0.65, cfg.height, cfg.size * 0.65),
+      new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.5, metalness: 0.3 })
+    );
+    body.position.y = cfg.height / 2;
+    body.castShadow = true;
+    group.add(body);
+    
+    for (let floor = 0; floor < 6; floor++) {
+      for (let side = 0; side < 4; side++) {
+        const window = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 0.6, 0.05),
+          new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 0.5 })
+        );
+        window.position.y = (floor + 0.5) * (cfg.height / 6);
+        
+        if (side === 0) window.position.x = cfg.size * 0.33;
+        else if (side === 1) window.position.x = -cfg.size * 0.33;
+        else if (side === 2) { window.position.z = cfg.size * 0.33; window.rotation.y = Math.PI / 2; }
+        else { window.position.z = -cfg.size * 0.33; window.rotation.y = Math.PI / 2; }
+        
+        group.add(window);
+      }
+    }
+  }
+  
+  else if (type === 'dome') {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(cfg.size * 0.55, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ 
+        color: cfg.color, 
+        transparent: true, 
+        opacity: 0.4, 
+        roughness: 0.1,
+        emissive: cfg.color,
+        emissiveIntensity: 0.1
+      })
+    );
+    dome.position.y = cfg.height * 0.5;
+    dome.castShadow = true;
+    group.add(dome);
+    
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const tree = new THREE.Mesh(
+        new THREE.ConeGeometry(0.3, 1.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x2e7d32 })
+      );
+      tree.position.x = Math.cos(angle) * (cfg.size * 0.3);
+      tree.position.z = Math.sin(angle) * (cfg.size * 0.3);
+      tree.position.y = 0.75;
+      group.add(tree);
+    }
+  }
+  
+  else if (type === 'solar') {
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.5, 0.6, 8),
+      new THREE.MeshStandardMaterial({ color: 0x37474f })
+    );
+    base.position.y = 0.3;
+    group.add(base);
+    
+    for (let i = 0; i < 6; i++) {
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 0.1, 1.2),
+        new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.2, metalness: 0.8 })
+      );
+      panel.position.y = cfg.height;
+      panel.position.x = (i % 3) * 2 - 2;
+      panel.position.z = Math.floor(i / 3) * 1.5 - 0.75;
+      panel.rotation.x = -Math.PI / 5;
+      panel.castShadow = true;
+      group.add(panel);
+    }
+  }
+  
+  else if (type === 'reactor') {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(cfg.size * 0.5, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ 
+        color: cfg.color, 
+        roughness: 0.3, 
+        metalness: 0.7, 
+        emissive: cfg.color, 
+        emissiveIntensity: 0.3 
+      })
+    );
+    dome.position.y = cfg.height * 0.7;
+    dome.castShadow = true;
+    group.add(dome);
+    
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(cfg.size * 0.5, cfg.size * 0.6, cfg.height * 0.7, 16),
+      new THREE.MeshStandardMaterial({ color: 0x263238 })
+    );
+    base.position.y = cfg.height * 0.35;
+    base.castShadow = true;
+    group.add(base);
+  }
+  
+  else if (type === 'farm') {
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(cfg.size * 0.7, cfg.height, cfg.size * 0.7),
+      new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3 })
+    );
+    body.position.y = cfg.height / 2;
+    body.castShadow = true;
+    group.add(body);
+    
+    const panel = new THREE.Mesh(
+      new THREE.BoxGeometry(cfg.size * 0.72, cfg.height * 0.4, cfg.size * 0.72),
+      new THREE.MeshStandardMaterial({ 
+        color: cfg.color, 
+        transparent: true, 
+        opacity: 0.5,
+        emissive: cfg.color,
+        emissiveIntensity: 0.2
+      })
+    );
+    panel.position.y = cfg.height * 0.7;
+    group.add(panel);
+  }
+  
+  else if (type === 'water') {
+    const tank = new THREE.Mesh(
+      new THREE.CylinderGeometry(cfg.size * 0.45, cfg.size * 0.45, cfg.height, 16),
+      new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.3, metalness: 0.8 })
+    );
+    tank.position.y = cfg.height / 2;
+    tank.castShadow = true;
+    group.add(tank);
+  }
+  
+  else if (type === 'mine') {
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(cfg.size * 0.7, cfg.height * 0.6, cfg.size * 0.7),
+      new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.8 })
+    );
+    body.position.y = cfg.height * 0.3;
+    body.castShadow = true;
+    group.add(body);
+    
+    const drill = new THREE.Mesh(
+      new THREE.ConeGeometry(0.5, 2, 8),
+      new THREE.MeshStandardMaterial({ color: 0x424242, metalness: 0.8 })
+    );
+    drill.position.y = cfg.height + 0.5;
+    drill.castShadow = true;
+    group.add(drill);
+  }
+  
+  else if (type === 'lab') {
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(cfg.size * 0.7, cfg.height * 0.7, cfg.size * 0.7),
+      new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.4, metalness: 0.5 })
+    );
+    body.position.y = cfg.height * 0.35;
+    body.castShadow = true;
+    group.add(body);
+    
+    const dish = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 20, 20, 0, Math.PI * 2, 0, Math.PI / 3),
+      new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.8 })
+    );
+    dish.position.y = cfg.height * 1.5;
+    dish.rotation.x = Math.PI / 4;
+    group.add(dish);
+  }
+  
+  else if (type === 'spaceport') {
+    const pad = new THREE.Mesh(
+      new THREE.CylinderGeometry(cfg.size * 0.7, cfg.size * 0.7, 0.4, 32),
+      new THREE.MeshStandardMaterial({ color: 0x37474f, roughness: 0.7, metalness: 0.6 })
+    );
+    pad.position.y = 0.2;
+    pad.castShadow = true;
+    group.add(pad);
+    
+    const tower = new THREE.Mesh(
+      new THREE.CylinderGeometry(1, 1.2, cfg.height, 8),
+      new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.4, metalness: 0.6 })
+    );
+    tower.position.y = cfg.height / 2;
+    tower.position.x = cfg.size * 0.5;
+    tower.castShadow = true;
+    group.add(tower);
+    
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const light = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xff6432, emissive: 0xff6432, emissiveIntensity: 1 })
+      );
+      light.position.x = Math.cos(angle) * (cfg.size * 0.65);
+      light.position.z = Math.sin(angle) * (cfg.size * 0.65);
+      light.position.y = 0.4;
+      group.add(light);
+    }
+  }
+  
+  return group;
+}
+
+// ========== BUILDING PLACEMENT ==========
+function canPlaceBuilding(tile, type) {
+  const cfg = BUILDINGS[type];
+  const gridX = tile.userData.gridX;
+  const gridZ = tile.userData.gridZ;
+  
+  for (let x = 0; x < cfg.size; x++) {
+    for (let z = 0; z < cfg.size; z++) {
+      const checkTile = tileMap.get(`${gridX + x},${gridZ + z}`);
+      if (!checkTile || checkTile.userData.building) return false;
+    }
+  }
+  
+  return gameState.credits >= cfg.cost;
+}
+
+function placeBuilding(tile, type) {
+  if (!canPlaceBuilding(tile, type)) {
+    showToast('Cannot place building here!');
+    return;
+  }
+  
+  const cfg = BUILDINGS[type];
+  const gridX = tile.userData.gridX;
+  const gridZ = tile.userData.gridZ;
+  
+  gameState.credits -= cfg.cost;
+  
+  const mesh = createBuildingMesh(type);
+  const centerX = (gridX + cfg.size / 2 - 0.5) * TILE_SIZE + TILE_SIZE / 2;
+  const centerZ = (gridZ + cfg.size / 2 - 0.5) * TILE_SIZE + TILE_SIZE / 2;
+  mesh.position.set(centerX, 0, centerZ);
+  scene.add(mesh);
+  
+  const building = { type, mesh, tiles: [], prod: { ...cfg.prod } };
+  
+  for (let x = 0; x < cfg.size; x++) {
+    for (let z = 0; z < cfg.size; z++) {
+      const occupiedTile = tileMap.get(`${gridX + x},${gridZ + z}`);
+      if (occupiedTile) {
+        occupiedTile.userData.building = building;
+        building.tiles.push(occupiedTile);
+      }
+    }
+  }
+  
+  gameState.buildings.push(building);
+  updateHUD();
+  showToast(`Built ${cfg.name}!`, 1000);
+  updateInfo(cfg.name, `Cost: ${cfg.cost} credits. Total buildings: ${gameState.buildings.length}`);
+}
+
+function removeBuilding(tile) {
+  const building = tile.userData.building;
+  if (!building) {
+    showToast('No building here!');
+    return;
+  }
+  
+  scene.remove(building.mesh);
+  building.tiles.forEach(t => t.userData.building = null);
+  
+  const index = gameState.buildings.indexOf(building);
+  if (index > -1) gameState.buildings.splice(index, 1);
+  
+  const cfg = BUILDINGS[building.type];
+  gameState.credits += Math.floor(cfg.cost * 0.5);
+  
+  updateHUD();
+  showToast(`Removed ${cfg.name}`, 1200);
+}
+
+// ========== INPUT ==========
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredTile = null;
+
+window.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+window.addEventListener('click', (e) => {
+  if (!gameState.started || e.target.tagName === 'BUTTON') return;
+  
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(tiles);
+  
+  if (intersects.length > 0 && gameState.selectedType) {
+    placeBuilding(intersects[0].object, gameState.selectedType);
+  }
+});
+
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  gameState.selectedType = null;
+  document.querySelectorAll('.build-btn').forEach(btn => btn.classList.remove('selected'));
+  showToast('Selection cancelled', 800);
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') {
+    gameState.selectedType = null;
+    document.querySelectorAll('.build-btn').forEach(btn => btn.classList.remove('selected'));
+  }
+  
+  if (e.code === 'Delete') {
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(tiles);
+    if (intersects.length > 0) removeBuilding(intersects[0].object);
+  }
+  
+  if (e.code === 'Space') {
+    camera.position.set(40, 50, 40);
+    controls.target.set(0, 0, 0);
+  }
+});
+
+// Build buttons
+document.querySelectorAll('.build-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const type = btn.dataset.type;
+    gameState.selectedType = type;
+    
+    document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    
+    const cfg = BUILDINGS[type];
+    updateInfo(`Selected: ${cfg.name}`, `Cost: ${cfg.cost} credits. Click on grid to place.`);
+    showToast(`Selected ${cfg.name}`, 1000);
+  });
+});
+
+// ========== HOVER EFFECT ==========
+function updateHoverEffect() {
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(tiles);
+  
+  if (hoveredTile) hoveredTile.material.opacity = 0;
+  
+  if (intersects.length > 0 && gameState.selectedType) {
+    const tile = intersects[0].object;
+    const cfg = BUILDINGS[gameState.selectedType];
+    const canPlace = canPlaceBuilding(tile, gameState.selectedType);
+    const color = canPlace ? 0x00ff00 : 0xff0000;
+    
+    for (let x = 0; x < cfg.size; x++) {
+      for (let z = 0; z < cfg.size; z++) {
+        const checkTile = tileMap.get(`${tile.userData.gridX + x},${tile.userData.gridZ + z}`);
+        if (checkTile) {
+          checkTile.material.color.setHex(color);
+          checkTile.material.opacity = 0.4;
+        }
+      }
+    }
+    
+    hoveredTile = tile;
+  }
+}
+
+// ========== PRODUCTION ==========
+function calculateProduction() {
+  let totalEnergy = 0, totalEnergyProd = 0, totalFood = 0, totalWater = 0;
+  let totalCredits = 0, totalResearch = 0, totalPop = 0;
+  
+  gameState.buildings.forEach(building => {
+    const prod = building.prod;
+    if (prod.energy) {
+      if (prod.energy > 0) totalEnergyProd += prod.energy;
+      else totalEnergy += prod.energy;
+    }
+    if (prod.food) totalFood += prod.food;
+    if (prod.water) totalWater += prod.water;
+    if (prod.credits) totalCredits += prod.credits;
+    if (prod.research) totalResearch += prod.research;
+    if (prod.pop) totalPop += prod.pop;
+  });
+  
+  gameState.energyCap = totalEnergyProd;
+  gameState.energy = Math.max(0, Math.min(gameState.energyCap, gameState.energy + totalEnergy));
+  gameState.food = Math.max(0, gameState.food + totalFood);
+  gameState.water = Math.max(0, gameState.water + totalWater);
+  gameState.credits += totalCredits;
+  gameState.research += totalResearch;
+  gameState.pop = totalPop;
+  
+  if (gameState.energy <= 0 && totalEnergy < 0) showToast('⚠️ POWER SHORTAGE!', 2000);
+  if (gameState.food <= 0) showToast('⚠️ FOOD SHORTAGE!', 2000);
+  if (gameState.water <= 0) showToast('⚠️ WATER SHORTAGE!', 2000);
+  
+  updateHUD();
+}
+
+// ========== ANIMATION LOOP ==========
+let lastTime = performance.now();
+
+function animate(currentTime) {
+  requestAnimationFrame(animate);
+  
+  const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
+  lastTime = currentTime;
+  
+  // FPS
+  gameState.fpsBuf.push(1 / deltaTime);
+  if (gameState.fpsBuf.length > 30) gameState.fpsBuf.shift();
+  document.getElementById('fps').textContent = Math.round(
+    gameState.fpsBuf.reduce((a, b) => a + b) / gameState.fpsBuf.length
+  );
+  
+  // Always animate stars
+  stars.rotation.y += deltaTime * 0.01;
+  
+  if (gameState.started) {
+    gameState.time += deltaTime;
+    gameState.lastTick += deltaTime;
+    
+    // Production tick every 5 seconds
+    if (gameState.lastTick >= 5) {
+      gameState.lastTick = 0;
+      gameState.day++;
+      calculateProduction();
+    }
+    
+    // Animate spaceships
+    updateSpaceships(deltaTime);
+    
+    // Animate buildings
+    gameState.buildings.forEach(building => {
+      if (building.type === 'solar') {
+        building.mesh.rotation.y += deltaTime * 0.15;
+      }
+      if (building.type === 'reactor') {
+        building.mesh.children.forEach(child => {
+          if (child.material && child.material.emissive) {
+            child.material.emissiveIntensity = 0.3 + Math.sin(gameState.time * 2) * 0.15;
+          }
+        });
+      }
+      if (building.type === 'spaceport') {
+        building.mesh.children.forEach(child => {
+          if (child.material && child.material.emissive && child.geometry.type === 'SphereGeometry') {
+            child.material.emissiveIntensity = 0.7 + Math.sin(gameState.time * 4) * 0.3;
+          }
+        });
+      }
+    });
+    
+    updateHoverEffect();
+  }
+  
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ========== RESIZE ==========
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ========== START ==========
+console.log('Starting animation loop...');
+updateHUD();
+animate(performance.now());
+console.log('Game ready!');
+
+</script>
+</body>
+</html>

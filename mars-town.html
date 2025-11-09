@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Mars Town Builder</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:#1a0f0f;font-family:system-ui,Segoe UI,Roboto,Arial;color:#fff}
+  
+  #hud{position:fixed;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;z-index:10;pointer-events:none}
+  .hud-group{display:flex;gap:8px;flex-wrap:wrap}
+  .stat{background:rgba(20,10,10,.85);border:2px solid rgba(255,120,80,.4);padding:6px 12px;border-radius:8px;font-weight:700;font-size:14px}
+  
+  #buildMenu{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:10;background:rgba(10,5,5,.9);padding:10px;border-radius:12px;border:2px solid rgba(255,120,80,.5)}
+  .build-btn{cursor:pointer;background:linear-gradient(135deg,#d84315,#bf360c);border:2px solid #ff6e40;color:#fff;padding:10px 14px;border-radius:10px;font-weight:800;font-size:13px;transition:all .2s}
+  .build-btn:hover{transform:scale(1.05);box-shadow:0 0 20px rgba(255,110,64,.6)}
+  .build-btn:active{transform:scale(.95)}
+  .build-btn.selected{background:linear-gradient(135deg,#43a047,#2e7d32);border-color:#66bb6a;box-shadow:0 0 15px rgba(102,187,106,.8)}
+  
+  #info{position:fixed;top:70px;left:12px;max-width:400px;background:rgba(10,5,5,.9);border:2px solid rgba(255,120,80,.4);padding:10px 14px;border-radius:10px;display:none;z-index:10}
+  
+  #help{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(10,5,5,.85);border:2px solid rgba(255,120,80,.3);padding:6px 12px;border-radius:8px;font-size:12px;text-align:center;z-index:10}
+  
+  #toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.95);border:3px solid #ff6e40;padding:20px 30px;border-radius:15px;font-size:24px;font-weight:800;opacity:0;transition:opacity .3s;pointer-events:none;z-index:20}
+  
+  #menu{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.8);z-index:30}
+  #menu button{cursor:pointer;background:linear-gradient(135deg,#d84315,#bf360c);border:3px solid #ff6e40;color:#fff;padding:16px 32px;border-radius:15px;font-weight:900;font-size:20px;box-shadow:0 0 30px rgba(255,110,64,.5)}
+  #menu button:hover{transform:scale(1.1)}
+</style>
+</head>
+<body>
+  <div id="hud">
+    <div class="hud-group">
+      <div class="stat">👥 Pop: <span id="pop">0</span></div>
+      <div class="stat">⚡ Energy: <span id="energy">50</span></div>
+      <div class="stat">💰 Credits: <span id="credits">100</span></div>
+      <div class="stat">🌾 Food: <span id="food">20</span></div>
+      <div class="stat">💧 Water: <span id="water">30</span></div>
+    </div>
+    <div class="hud-group">
+      <div class="stat">Sol <span id="day">1</span></div>
+      <div class="stat">FPS: <span id="fps">60</span></div>
+    </div>
+  </div>
+  
+  <div id="info"></div>
+  <div id="toast"></div>
+  
+  <div id="help">Click tiles to build • WASD/Arrows: move camera • Mouse wheel: zoom • Right-click: cancel • P: pause</div>
+  
+  <div id="buildMenu">
+    <button class="build-btn" data-type="hab">🏠 Habitat<br><small>💰50</small></button>
+    <button class="build-btn" data-type="solar">☀️ Solar<br><small>💰40</small></button>
+    <button class="build-btn" data-type="farm">🌾 Farm<br><small>💰60</small></button>
+    <button class="build-btn" data-type="well">💧 Well<br><small>💰45</small></button>
+    <button class="build-btn" data-type="mine">⛏️ Mine<br><small>💰70</small></button>
+    <button class="build-btn" data-type="lab">🔬 Lab<br><small>💰100</small></button>
+    <button class="build-btn" data-type="dome">🛡️ Dome<br><small>💰120</small></button>
+  </div>
+  
+  <div id="menu"><button id="startBtn">Start Building Your Mars Town!</button></div>
+  
+  <script src="https://unpkg.com/three@0.157.0/build/three.min.js"></script>
+  <script>
+(()=>{
+// ========== CONFIG ==========
+const BUILDINGS = {
+  hab:    {name:'Habitat',    cost:50,  prod:{pop:4,energy:-2,food:-1,water:-1}, color:0x4fc3f7, shape:'box'},
+  solar:  {name:'Solar Panel',cost:40,  prod:{energy:8}, color:0x1976d2, shape:'flat'},
+  farm:   {name:'Farm Dome',  cost:60,  prod:{food:6,energy:-1,water:-2}, color:0x66bb6a, shape:'dome'},
+  well:   {name:'Water Well', cost:45,  prod:{water:5,energy:-1}, color:0x29b6f6, shape:'cylinder'},
+  mine:   {name:'Mine',       cost:70,  prod:{credits:3,energy:-2}, color:0xffa726, shape:'cone'},
+  lab:    {name:'Lab',        cost:100, prod:{credits:5,energy:-3}, color:0xec407a, shape:'torus'},
+  dome:   {name:'Mega Dome',  cost:120, prod:{pop:8,energy:-3,food:-2,water:-2}, color:0xab47bc, shape:'sphere'}
+};
+
+// ========== DOM ==========
+const UI = {
+  pop:q('#pop'), energy:q('#energy'), credits:q('#credits'), food:q('#food'), water:q('#water'),
+  day:q('#day'), fps:q('#fps'), info:q('#info'), toast:q('#toast'), menu:q('#menu')
+};
+function q(s){return document.querySelector(s)}
+function toast(msg,ms=1200){UI.toast.textContent=msg;UI.toast.style.opacity='1';setTimeout(()=>UI.toast.style.opacity='0',ms)}
+
+// ========== THREE.JS SETUP ==========
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x3d1f1f, 30, 80);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(0, 20, 25);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0xffccaa, 0.6);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffd4a3, 1.2);
+sun.position.set(20, 30, 15);
+sun.castShadow = true;
+sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
+scene.add(sun);
+
+// Mars ground
+const groundGeo = new THREE.CircleGeometry(40, 64);
+const groundMat = new THREE.MeshStandardMaterial({color:0x8b4513, roughness:0.95});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Starfield
+const stars = new THREE.Group();
+for(let i=0;i<400;i++){
+  const star = new THREE.Mesh(
+    new THREE.SphereGeometry(0.1+Math.random()*0.2,4,4),
+    new THREE.MeshBasicMaterial({color:0xffffff})
+  );
+  star.position.set(
+    (Math.random()-0.5)*150,
+    Math.random()*80+20,
+    (Math.random()-0.5)*150
+  );
+  stars.add(star);
+}
+scene.add(stars);
+
+// ========== GRID ==========
+const GRID_SIZE = 12;
+const tiles = [];
+const tileGeo = new THREE.PlaneGeometry(2.8, 2.8);
+const tileMat = new THREE.MeshStandardMaterial({color:0x5d4037, roughness:0.9});
+const hoverMat = new THREE.MeshStandardMaterial({color:0xff6e40, roughness:0.7, emissive:0xff6e40, emissiveIntensity:0.3});
+
+for(let x=-GRID_SIZE/2; x<GRID_SIZE/2; x++){
+  for(let z=-GRID_SIZE/2; z<GRID_SIZE/2; z++){
+    const tile = new THREE.Mesh(tileGeo, tileMat.clone());
+    tile.rotation.x = -Math.PI/2;
+    tile.position.set(x*3, 0.01, z*3);
+    tile.receiveShadow = true;
+    tile.userData = {x, z, building:null, hovered:false};
+    scene.add(tile);
+    tiles.push(tile);
+  }
+}
+
+// ========== STATE ==========
+const state = {
+  credits:100, energy:50, food:20, water:30, pop:0,
+  day:1, time:0, lastTick:0,
+  selectedType:null, paused:false, started:false,
+  buildings:[], fpsBuf:[]
+};
+
+function updateHUD(){
+  UI.pop.textContent = state.pop;
+  UI.energy.textContent = Math.floor(state.energy);
+  UI.credits.textContent = Math.floor(state.credits);
+  UI.food.textContent = Math.floor(state.food);
+  UI.water.textContent = Math.floor(state.water);
+  UI.day.textContent = state.day;
+}
+
+// ========== BUILDING ==========
+function createBuildingMesh(type){
+  const cfg = BUILDINGS[type];
+  let geo, mat = new THREE.MeshStandardMaterial({color:cfg.color, roughness:0.4, metalness:0.3});
+  
+  switch(cfg.shape){
+    case 'box': geo = new THREE.BoxGeometry(1.5,1.2,1.5); break;
+    case 'flat': geo = new THREE.BoxGeometry(2,0.2,2); break;
+    case 'dome': geo = new THREE.SphereGeometry(0.9,16,16,0,Math.PI*2,0,Math.PI/2); break;
+    case 'cylinder': geo = new THREE.CylinderGeometry(0.6,0.6,1.5,16); break;
+    case 'cone': geo = new THREE.ConeGeometry(0.8,1.8,8); break;
+    case 'torus': geo = new THREE.TorusGeometry(0.7,0.25,12,20); break;
+    case 'sphere': geo = new THREE.SphereGeometry(1.2,20,20); mat.transparent=true; mat.opacity=0.7; break;
+  }
+  
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function canBuild(type){
+  const cfg = BUILDINGS[type];
+  return state.credits >= cfg.cost;
+}
+
+function build(tile, type){
+  if(tile.userData.building){toast('Tile occupied!'); return;}
+  if(!canBuild(type)){toast('Not enough credits!'); return;}
+  
+  const cfg = BUILDINGS[type];
+  state.credits -= cfg.cost;
+  
+  const mesh = createBuildingMesh(type);
+  mesh.position.set(tile.position.x, cfg.shape==='flat'?0.2:1, tile.position.z);
+  scene.add(mesh);
+  
+  tile.userData.building = {type, mesh, prod:cfg.prod};
+  state.buildings.push(tile.userData.building);
+  
+  updateHUD();
+  toast(`Built ${cfg.name}!`, 800);
+}
+
+// ========== INPUT ==========
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(e.code==='KeyP'){state.paused=!state.paused; toast(state.paused?'Paused':'Resumed');}
+});
+addEventListener('keyup', e => keys[e.code] = false);
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredTile = null;
+
+addEventListener('mousemove', e => {
+  mouse.x = (e.clientX/innerWidth)*2-1;
+  mouse.y = -(e.clientY/innerHeight)*2+1;
+});
+
+addEventListener('click', e => {
+  if(!state.started || state.paused) return;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(tiles);
+  if(hits.length && state.selectedType){
+    build(hits[0].object, state.selectedType);
+  }
+});
+
+addEventListener('contextmenu', e => {
+  e.preventDefault();
+  state.selectedType = null;
+  document.querySelectorAll('.build-btn').forEach(b=>b.classList.remove('selected'));
+  toast('Build cancelled', 600);
+});
+
+// Build menu
+document.querySelectorAll('.build-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const type = btn.dataset.type;
+    state.selectedType = type;
+    document.querySelectorAll('.build-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    toast(`Selected: ${BUILDINGS[type].name}`, 800);
+  });
+});
+
+// Start button
+q('#startBtn').addEventListener('click', () => {
+  UI.menu.style.display = 'none';
+  state.started = true;
+  updateHUD();
+  toast('Welcome to Mars! Build your town and keep colonists happy!', 2000);
+});
+
+// ========== CAMERA CONTROL ==========
+let camX=0, camZ=25, camY=20;
+function updateCamera(dt){
+  const speed = 15;
+  if(keys['KeyW']||keys['ArrowUp']) camZ -= speed*dt;
+  if(keys['KeyS']||keys['ArrowDown']) camZ += speed*dt;
+  if(keys['KeyA']||keys['ArrowLeft']) camX -= speed*dt;
+  if(keys['KeyD']||keys['ArrowRight']) camX += speed*dt;
+  
+  camX = THREE.MathUtils.clamp(camX, -20, 20);
+  camZ = THREE.MathUtils.clamp(camZ, 10, 40);
+  
+  camera.position.x = THREE.MathUtils.lerp(camera.position.x, camX, 0.1);
+  camera.position.z = THREE.MathUtils.lerp(camera.position.z, camZ, 0.1);
+  camera.position.y = camY;
+  camera.lookAt(camX, 0, camZ-10);
+}
+
+addEventListener('wheel', e => {
+  camY = THREE.MathUtils.clamp(camY + e.deltaY*0.02, 10, 35);
+});
+
+// ========== PRODUCTION TICK ==========
+function tick(dt){
+  state.time += dt;
+  state.lastTick += dt;
+  
+  if(state.lastTick >= 1){
+    state.lastTick = 0;
+    state.day++;
+    
+    // Calculate production
+    let dEnergy=0, dFood=0, dWater=0, dCredits=0, dPop=0;
+    
+    state.buildings.forEach(b => {
+      const p = b.prod;
+      dEnergy += p.energy||0;
+      dFood += p.food||0;
+      dWater += p.water||0;
+      dCredits += p.credits||0;
+      dPop += p.pop||0;
+    });
+    
+    // Apply production
+    state.energy += dEnergy;
+    state.food += dFood;
+    state.water += dWater;
+    state.credits += dCredits;
+    state.pop = dPop;
+    
+    // Clamp negatives
+    if(state.energy < 0){toast('⚠️ Energy shortage!'); state.energy=0;}
+    if(state.food < 0){toast('⚠️ Food shortage!'); state.food=0;}
+    if(state.water < 0){toast('⚠️ Water shortage!'); state.water=0;}
+    
+    updateHUD();
+  }
+}
+
+// ========== HOVER EFFECT ==========
+function updateHover(){
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(tiles);
+  
+  if(hoveredTile){
+    hoveredTile.material.emissive.setHex(0x000000);
+    hoveredTile.material.emissiveIntensity = 0;
+  }
+  
+  if(hits.length && state.selectedType){
+    hoveredTile = hits[0].object;
+    if(!hoveredTile.userData.building){
+      hoveredTile.material.emissive.setHex(0xff6e40);
+      hoveredTile.material.emissiveIntensity = 0.4;
+    }
+  } else {
+    hoveredTile = null;
+  }
+}
+
+// ========== MAIN LOOP ==========
+let last = performance.now();
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, (now-last)/1000);
+  last = now;
+  
+  // FPS
+  state.fpsBuf.push(1/dt);
+  if(state.fpsBuf.length>30) state.fpsBuf.shift();
+  UI.fps.textContent = Math.round(state.fpsBuf.reduce((a,b)=>a+b)/state.fpsBuf.length);
+  
+  if(!state.started){
+    renderer.render(scene, camera);
+    return;
+  }
+  
+  if(!state.paused){
+    tick(dt);
+    updateCamera(dt);
+    updateHover();
+    
+    // Animate buildings
+    state.buildings.forEach(b => {
+      if(b.type==='solar') b.mesh.rotation.y += 0.3*dt;
+      if(b.type==='lab') b.mesh.rotation.y += 0.5*dt;
+      if(b.type==='dome') b.mesh.rotation.y += 0.2*dt;
+    });
+    
+    // Rotate stars slowly
+    stars.rotation.y += 0.0002;
+  }
+  
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+animate(performance.now());
+updateHUD();
+})();
+  </script>
+</body>
+</html>

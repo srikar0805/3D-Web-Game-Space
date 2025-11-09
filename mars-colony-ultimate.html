@@ -1,0 +1,1135 @@
+<script>
+(function() {
+'use strict';
+
+console.log('Game initializing...');
+
+// ========== BUILDING CONFIG ==========
+const BUILDINGS = {
+  road: { name: 'Road', cost: 10, size: 1, height: 0.1, color: 0x2a2a2a, prod: {} },
+  powerline: { name: 'Power Line', cost: 15, size: 1, height: 1.5, color: 0xffeb3b, prod: {} },
+  habitat: { name: 'Habitat Pod', cost: 100, size: 2, height: 3, color: 0x4fc3f7, prod: {pop:10, energy:-4, food:-3, water:-3} },
+  apartment: { name: 'Apartment Tower', cost: 200, size: 3, height: 6, color: 0x29b6f6, prod: {pop:30, energy:-10, food:-8, water:-8} },
+  dome: { name: 'Bio Dome', cost: 350, size: 4, height: 5, color: 0x66bb6a, prod: {pop:50, food:10, energy:-15, water:-10} },
+  solar: { name: 'Solar Array', cost: 80, size: 2, height: 1.5, color: 0x1976d2, prod: {energy:20} },
+  reactor: { name: 'Fusion Reactor', cost: 250, size: 3, height: 4, color: 0x00e676, prod: {energy:80, credits:-5} },
+  farm: { name: 'Hydroponic Farm', cost: 120, size: 2, height: 2.5, color: 0x66bb6a, prod: {food:15, energy:-4, water:-5} },
+  water: { name: 'Ice Extractor', cost: 90, size: 2, height: 2, color: 0x26c6da, prod: {water:12, energy:-3} },
+  mine: { name: 'Mining Complex', cost: 150, size: 2, height: 3, color: 0xffa726, prod: {credits:10, energy:-5} },
+  lab: { name: 'Research Lab', cost: 220, size: 2, height: 3.5, color: 0xec407a, prod: {research:8, energy:-8, credits:-4} },
+  spaceport: { name: 'Spaceport', cost: 400, size: 5, height: 6, color: 0xab47bc, prod: {credits:25, energy:-12} },
+  factory: { name: 'Factory', cost: 180, size: 3, height: 3, color: 0xff7043, prod: {credits:12, energy:-8} }
+};
+
+// ========== DOM ==========
+const UI = {
+  pop: document.getElementById('pop'),
+  credits: document.getElementById('credits'),
+  energy: document.getElementById('energy'),
+  food: document.getElementById('food'),
+  water: document.getElementById('water'),
+  research: document.getElementById('research'),
+  day: document.getElementById('day'),
+  fps: document.getElementById('fps'),
+  info: document.getElementById('info'),
+  toast: document.getElementById('toast'),
+  startScreen: document.getElementById('startScreen'),
+  startBtn: document.getElementById('startBtn')
+};
+
+// ========== GAME STATE ==========
+const state = {
+  credits: 1000,
+  energy: 0,
+  energyCap: 0,
+  food: 100,
+  water: 80,
+  pop: 0,
+  research: 0,
+  day: 1,
+  time: 0,
+  lastTick: 0,
+  selectedType: null,
+  buildings: [],
+  started: false,
+  paused: false,
+  fpsBuf: []
+};
+
+// ========== UI HELPER FUNCTIONS ==========
+function toast(msg, duration = 1500) {
+  UI.toast.textContent = msg;
+  UI.toast.style.opacity = '1';
+  setTimeout(() => UI.toast.style.opacity = '0', duration);
+}
+
+function updateInfo(title, desc) {
+  UI.info.innerHTML = `<h4>${title}</h4><p>${desc}</p>`;
+}
+
+function updateHUD() {
+  UI.pop.textContent = Math.floor(state.pop);
+  UI.credits.textContent = Math.floor(state.credits);
+  UI.energy.textContent = `${Math.floor(state.energy)}/${Math.floor(state.energyCap)}`;
+  UI.food.textContent = Math.floor(state.food);
+  UI.water.textContent = Math.floor(state.water);
+  UI.research.textContent = Math.floor(state.research);
+  UI.day.textContent = state.day;
+}
+
+// ========== 3D SCENE AND GAME LOGIC VARIABLES ==========
+// We define these here so the functions can use them
+let scene, camera, renderer, controls, stars;
+let tiles = [];
+let tileMap = new Map();
+let spaceships = [];
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+let hoveredTile = null;
+
+// ========== 3D & GAME FUNCTIONS ==========
+// (Define all functions *before* they are called)
+
+function createSpaceship() {
+  const ship = new THREE.Group();
+  
+  // Main body
+  const bodyGeo = new THREE.ConeGeometry(1, 4, 8);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.rotation.x = Math.PI / 2;
+  ship.add(body);
+  
+  // Wings
+  const wingGeo = new THREE.BoxGeometry(4, 0.2, 1);
+  const wingMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.3 });
+  const wings = new THREE.Mesh(wingGeo, wingMat);
+  wings.position.z = -0.5;
+  ship.add(wings);
+  
+  // Engine glow
+  const engineGeo = new THREE.SphereGeometry(0.4, 8, 8);
+  const engineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8 });
+  const engine1 = new THREE.Mesh(engineGeo, engineMat);
+  engine1.position.set(-1.5, 0, -2);
+  const engine2 = new THREE.Mesh(engineGeo, engineMat.clone());
+  engine2.position.set(1.5, 0, -2);
+  ship.add(engine1, engine2);
+  
+  ship.userData = {
+    speed: 0.3 + Math.random() * 0.2,
+    path: Math.random() > 0.5 ? 'orbit' : 'flyby',
+    angle: Math.random() * Math.PI * 2,
+    height: 30 + Math.random() * 20,
+    radius: 60 + Math.random() * 40,
+    engines: [engine1, engine2]
+  };
+  
+  scene.add(ship);
+  spaceships.push(ship);
+  
+  return ship;
+}
+
+function updateSpaceships(deltaTime) {
+  spaceships.forEach((ship, index) => {
+    const data = ship.userData;
+    
+    if (data.path === 'orbit') {
+      data.angle += deltaTime * data.speed * 0.1;
+      ship.position.x = Math.cos(data.angle) * data.radius;
+      ship.position.z = Math.sin(data.angle) * data.radius;
+      ship.position.y = data.height;
+      ship.lookAt(0, data.height, 0);
+    } else {
+      ship.position.x += Math.cos(data.angle) * data.speed;
+      ship.position.z += Math.sin(data.angle) * data.speed;
+      ship.position.y = data.height;
+      
+      // Remove if too far
+      if (Math.abs(ship.position.x) > 200 || Math.abs(ship.position.z) > 200) {
+        scene.remove(ship);
+        spaceships.splice(index, 1);
+        // Spawn new one
+        setTimeout(() => createSpaceship(), 5000);
+      }
+    }
+    
+    // Animate engines
+    data.engines.forEach(engine => {
+      engine.material.opacity = 0.6 + Math.sin(Date.now() * 0.01) * 0.2;
+    });
+  });
+}
+
+function createBuildingMesh(type) {
+  const cfg = BUILDINGS[type];
+  const group = new THREE.Group();
+  
+  if (type === 'road') {
+    const geo = new THREE.BoxGeometry(TILE_SIZE * 0.9, cfg.height, TILE_SIZE * 0.9);
+    const mat = new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.8 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    
+    // Road markings
+    const lineGeo = new THREE.BoxGeometry(0.2, 0.12, TILE_SIZE * 0.8);
+    const lineMat = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+    const line = new THREE.Mesh(lineGeo, lineMat);
+    line.position.y = 0.06;
+    group.add(line);
+  }
+  
+  else if (type === 'powerline') {
+    const poleGeo = new THREE.CylinderGeometry(0.15, 0.15, cfg.height, 8);
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7, roughness: 0.3 });
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.y = cfg.height / 2;
+    pole.castShadow = true;
+    group.add(pole);
+    
+    const wireGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.5, 6);
+    const wireMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      emissive: cfg.color, 
+      emissiveIntensity: 0.6,
+      metalness: 0.8
+    });
+    const wire = new THREE.Mesh(wireGeo, wireMat);
+    wire.position.y = cfg.height;
+    wire.rotation.z = Math.PI / 2;
+    group.add(wire);
+  }
+  
+  else if (type === 'habitat') {
+    // Realistic habitat module
+    const bodyGeo = new THREE.CylinderGeometry(cfg.size * 0.45, cfg.size * 0.45, cfg.height, 16);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.4, 
+      metalness: 0.6 
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = cfg.height / 2;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    group.add(body);
+    
+    // Windows with glow
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const windowGeo = new THREE.BoxGeometry(0.4, 0.5, 0.1);
+      const windowMat = new THREE.MeshStandardMaterial({ 
+        color: 0xffeb3b, 
+        emissive: 0xffeb3b, 
+        emissiveIntensity: 0.8 
+      });
+      const window = new THREE.Mesh(windowGeo, windowMat);
+      window.position.x = Math.cos(angle) * (cfg.size * 0.46);
+      window.position.z = Math.sin(angle) * (cfg.size * 0.46);
+      window.position.y = cfg.height * 0.6;
+      window.lookAt(0, window.position.y, 0);
+      group.add(window);
+    }
+    
+    // Airlock
+    const airlockGeo = new THREE.BoxGeometry(0.8, 1.2, 0.6);
+    const airlockMat = new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.7 });
+    const airlock = new THREE.Mesh(airlockGeo, airlockMat);
+    airlock.position.set(cfg.size * 0.5, 0.6, 0);
+    airlock.castShadow = true;
+    group.add(airlock);
+  }
+  
+  else if (type === 'apartment') {
+    // Tall residential tower
+    const bodyGeo = new THREE.BoxGeometry(cfg.size * 0.65, cfg.height, cfg.size * 0.65);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.5, 
+      metalness: 0.3 
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = cfg.height / 2;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    group.add(body);
+    
+    // Windows on all floors
+    for (let floor = 0; floor < 6; floor++) {
+      for (let side = 0; side < 4; side++) {
+        for (let win = 0; win < 2; win++) {
+          const windowGeo = new THREE.BoxGeometry(0.5, 0.6, 0.05);
+          const windowMat = new THREE.MeshStandardMaterial({ 
+            color: 0x4fc3f7, 
+            emissive: 0x4fc3f7, 
+            emissiveIntensity: 0.5 
+          });
+          const window = new THREE.Mesh(windowGeo, windowMat);
+          const y = (floor + 0.5) * (cfg.height / 6);
+          window.position.y = y;
+          
+          const offset = (win - 0.5) * 1.2;
+          if (side === 0) { 
+            window.position.x = cfg.size * 0.33; 
+            window.position.z = offset; 
+          } else if (side === 1) { 
+            window.position.x = -cfg.size * 0.33; 
+            window.position.z = offset; 
+          } else if (side === 2) { 
+            window.position.z = cfg.size * 0.33; 
+            window.position.x = offset; 
+            window.rotation.y = Math.PI / 2; 
+          } else { 
+            window.position.z = -cfg.size * 0.33; 
+            window.position.x = offset; 
+            window.rotation.y = Math.PI / 2; 
+          }
+          
+          group.add(window);
+        }
+      }
+    }
+    
+    // Rooftop antenna
+    const antennaGeo = new THREE.CylinderGeometry(0.1, 0.1, 2, 8);
+    const antennaMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 });
+    const antenna = new THREE.Mesh(antennaGeo, antennaMat);
+    antenna.position.y = cfg.height + 1;
+    group.add(antenna);
+  }
+  
+  else if (type === 'dome') {
+    // Large bio dome
+    const domeGeo = new THREE.SphereGeometry(cfg.size * 0.55, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+    const domeMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      transparent: true, 
+      opacity: 0.4, 
+      roughness: 0.1,
+      metalness: 0.2,
+      emissive: cfg.color,
+      emissiveIntensity: 0.1
+    });
+    const dome = new THREE.Mesh(domeGeo, domeMat);
+    dome.position.y = cfg.height * 0.5;
+    dome.castShadow = true;
+    group.add(dome);
+    
+    // Support structure
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const strutGeo = new THREE.CylinderGeometry(0.15, 0.2, cfg.height * 0.5, 8);
+      const strutMat = new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.7 });
+      const strut = new THREE.Mesh(strutGeo, strutMat);
+      strut.position.x = Math.cos(angle) * (cfg.size * 0.5);
+      strut.position.z = Math.sin(angle) * (cfg.size * 0.5);
+      strut.position.y = cfg.height * 0.25;
+      strut.castShadow = true;
+      group.add(strut);
+    }
+    
+    // Trees inside
+    for (let i = 0; i < 10; i++) {
+      const treeGeo = new THREE.ConeGeometry(0.3, 1.5, 8);
+      const treeMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32 });
+      const tree = new THREE.Mesh(treeGeo, treeMat);
+      const angle = (i / 10) * Math.PI * 2;
+      tree.position.x = Math.cos(angle) * (cfg.size * 0.3);
+      tree.position.z = Math.sin(angle) * (cfg.size * 0.3);
+      tree.position.y = 0.75;
+      group.add(tree);
+    }
+  }
+  
+  else if (type === 'solar') {
+    // Solar panel array
+    const baseGeo = new THREE.CylinderGeometry(0.4, 0.5, 0.6, 8);
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x37474f, roughness: 0.7, metalness: 0.5 });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.y = 0.3;
+    base.castShadow = true;
+    group.add(base);
+    
+    // Multiple solar panels
+    for (let i = 0; i < 6; i++) {
+      const panelGeo = new THREE.BoxGeometry(1.8, 0.1, 1.2);
+      const panelMat = new THREE.MeshStandardMaterial({ 
+        color: cfg.color, 
+        roughness: 0.2, 
+        metalness: 0.8,
+        emissive: cfg.color,
+        emissiveIntensity: 0.1
+      });
+      const panel = new THREE.Mesh(panelGeo, panelMat);
+      panel.position.y = cfg.height;
+      panel.position.x = (i % 3) * 2 - 2;
+      panel.position.z = Math.floor(i / 3) * 1.5 - 0.75;
+      panel.rotation.x = -Math.PI / 5;
+      panel.castShadow = true;
+      group.add(panel);
+    }
+  }
+  
+  else if (type === 'reactor') {
+    // Fusion reactor with realistic design
+    const domeGeo = new THREE.SphereGeometry(cfg.size * 0.5, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+    const domeMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.3, 
+      metalness: 0.7, 
+      emissive: cfg.color, 
+      emissiveIntensity: 0.3 
+    });
+    const dome = new THREE.Mesh(domeGeo, domeMat);
+    dome.position.y = cfg.height * 0.7;
+    dome.castShadow = true;
+    group.add(dome);
+    
+    const baseGeo = new THREE.CylinderGeometry(cfg.size * 0.5, cfg.size * 0.6, cfg.height * 0.7, 16);
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.6, metalness: 0.5 });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.y = cfg.height * 0.35;
+    base.castShadow = true;
+    group.add(base);
+    
+    // Cooling towers
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const towerGeo = new THREE.CylinderGeometry(0.4, 0.5, 2, 8);
+      const towerMat = new THREE.MeshStandardMaterial({ color: 0x455a64, metalness: 0.6 });
+      const tower = new THREE.Mesh(towerGeo, towerMat);
+      tower.position.x = Math.cos(angle) * (cfg.size * 0.6);
+      tower.position.z = Math.sin(angle) * (cfg.size * 0.6);
+      tower.position.y = 1;
+      tower.castShadow = true;
+      group.add(tower);
+    }
+  }
+  
+  else if (type === 'farm') {
+    // Hydroponic farm
+    const bodyGeo = new THREE.BoxGeometry(cfg.size * 0.7, cfg.height, cfg.size * 0.7);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: 0xeeeeee, 
+      roughness: 0.3, 
+      metalness: 0.4 
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = cfg.height / 2;
+    body.castShadow = true;
+    group.add(body);
+    
+    // Greenhouse panels
+    const panelGeo = new THREE.BoxGeometry(cfg.size * 0.72, cfg.height * 0.4, cfg.size * 0.72);
+    const panelMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      transparent: true, 
+      opacity: 0.5,
+      emissive: cfg.color,
+      emissiveIntensity: 0.2
+    });
+    const panel = new THREE.Mesh(panelGeo, panelMat);
+    panel.position.y = cfg.height * 0.7;
+    group.add(panel);
+    
+    // Growing lights
+    for (let i = 0; i < 4; i++) {
+      const lightGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 8);
+      const lightMat = new THREE.MeshStandardMaterial({ 
+        color: 0xff00ff, 
+        emissive: 0xff00ff, 
+        emissiveIntensity: 0.8 
+      });
+      const light = new THREE.Mesh(lightGeo, lightMat);
+      light.position.x = (i % 2) * 1.5 - 0.75;
+      light.position.z = Math.floor(i / 2) * 1.5 - 0.75;
+      light.position.y = cfg.height * 0.9;
+      group.add(light);
+    }
+  }
+  
+  else if (type === 'water') {
+    // Ice extractor
+    const tankGeo = new THREE.CylinderGeometry(cfg.size * 0.45, cfg.size * 0.45, cfg.height, 16);
+    const tankMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.3, 
+      metalness: 0.8 
+    });
+    const tank = new THREE.Mesh(tankGeo, tankMat);
+    tank.position.y = cfg.height / 2;
+    tank.castShadow = true;
+    group.add(tank);
+    
+    // Pipes
+    for (let i = 0; i < 4; i++) {
+      const pipeGeo = new THREE.CylinderGeometry(0.2, 0.2, cfg.height * 0.9, 8);
+      const pipeMat = new THREE.MeshStandardMaterial({ color: 0x546e7a, metalness: 0.8, roughness: 0.3 });
+      const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+      const angle = (i / 4) * Math.PI * 2;
+      pipe.position.x = Math.cos(angle) * (cfg.size * 0.5);
+      pipe.position.z = Math.sin(angle) * (cfg.size * 0.5);
+      pipe.position.y = cfg.height * 0.45;
+      pipe.castShadow = true;
+      group.add(pipe);
+    }
+  }
+  
+  else if (type === 'mine') {
+    // Mining complex
+    const bodyGeo = new THREE.BoxGeometry(cfg.size * 0.7, cfg.height * 0.6, cfg.size * 0.7);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.8, 
+      metalness: 0.3 
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = cfg.height * 0.3;
+    body.castShadow = true;
+    group.add(body);
+    
+    // Drill tower
+    const drillGeo = new THREE.ConeGeometry(0.5, 2, 8);
+    const drillMat = new THREE.MeshStandardMaterial({ color: 0x424242, metalness: 0.8, roughness: 0.4 });
+    const drill = new THREE.Mesh(drillGeo, drillMat);
+    drill.position.y = cfg.height + 0.5;
+    drill.castShadow = true;
+    group.add(drill);
+    
+    // Conveyor
+    const conveyorGeo = new THREE.BoxGeometry(0.6, 0.3, cfg.size * 0.8);
+    const conveyorMat = new THREE.MeshStandardMaterial({ color: 0x616161, metalness: 0.6 });
+    const conveyor = new THREE.Mesh(conveyorGeo, conveyorMat);
+    conveyor.position.set(cfg.size * 0.5, 0.5, 0);
+    conveyor.castShadow = true;
+    group.add(conveyor);
+  }
+  
+  else if (type === 'lab') {
+    // Research laboratory
+    const bodyGeo = new THREE.BoxGeometry(cfg.size * 0.7, cfg.height * 0.7, cfg.size * 0.7);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.4, 
+      metalness: 0.5 
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = cfg.height * 0.35;
+    body.castShadow = true;
+    group.add(body);
+    
+    // Antenna tower
+    const antennaGeo = new THREE.CylinderGeometry(0.12, 0.12, cfg.height * 0.8, 8);
+    const antennaMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.9, roughness: 0.1 });
+    const antenna = new THREE.Mesh(antennaGeo, antennaMat);
+    antenna.position.y = cfg.height * 1.1;
+    antenna.castShadow = true;
+    group.add(antenna);
+    
+    // Satellite dish
+    const dishGeo = new THREE.SphereGeometry(0.7, 20, 20, 0, Math.PI * 2, 0, Math.PI / 3);
+    const dishMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.8, roughness: 0.2 });
+    const dish = new THREE.Mesh(dishGeo, dishMat);
+    dish.position.y = cfg.height * 1.5;
+    dish.rotation.x = Math.PI / 4;
+    dish.castShadow = true;
+    group.add(dish);
+  }
+  
+  else if (type === 'spaceport') {
+    // Large spaceport with landing pad
+    const padGeo = new THREE.CylinderGeometry(cfg.size * 0.7, cfg.size * 0.7, 0.4, 32);
+    const padMat = new THREE.MeshStandardMaterial({ 
+      color: 0x37474f, 
+      roughness: 0.7, 
+      metalness: 0.6 
+    });
+    const pad = new THREE.Mesh(padGeo, padMat);
+    pad.position.y = 0.2;
+    pad.castShadow = true;
+    group.add(pad);
+    
+    // Control tower
+    const towerGeo = new THREE.CylinderGeometry(1, 1.2, cfg.height, 8);
+    const towerMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.4, 
+      metalness: 0.6 
+    });
+    const tower = new THREE.Mesh(towerGeo, towerMat);
+    tower.position.y = cfg.height / 2;
+    tower.position.x = cfg.size * 0.5;
+    tower.castShadow = true;
+    group.add(tower);
+    
+    // Landing lights
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const lightGeo = new THREE.SphereGeometry(0.25, 8, 8);
+      const lightMat = new THREE.MeshStandardMaterial({ 
+        color: 0xff6432, 
+        emissive: 0xff6432, 
+        emissiveIntensity: 1 
+      });
+      const light = new THREE.Mesh(lightGeo, lightMat);
+      light.position.x = Math.cos(angle) * (cfg.size * 0.65);
+      light.position.z = Math.sin(angle) * (cfg.size * 0.65);
+      light.position.y = 0.4;
+      group.add(light);
+    }
+    
+    // Hangar
+    const hangarGeo = new THREE.BoxGeometry(cfg.size * 0.6, cfg.height * 0.5, cfg.size * 0.4);
+    const hangarMat = new THREE.MeshStandardMaterial({ color: 0x455a64, metalness: 0.5 });
+    const hangar = new THREE.Mesh(hangarGeo, hangarMat);
+    hangar.position.set(-cfg.size * 0.5, cfg.height * 0.25, 0);
+    hangar.castShadow = true;
+    group.add(hangar);
+  }
+  
+  else if (type === 'factory') {
+    // Industrial factory
+    const bodyGeo = new THREE.BoxGeometry(cfg.size * 0.8, cfg.height * 0.7, cfg.size * 0.6);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: cfg.color, 
+      roughness: 0.7, 
+      metalness: 0.4 
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = cfg.height * 0.35;
+    body.castShadow = true;
+    group.add(body);
+    
+    // Smokestacks
+    for (let i = 0; i < 3; i++) {
+      const stackGeo = new THREE.CylinderGeometry(0.3, 0.35, cfg.height * 0.8, 8);
+      const stackMat = new THREE.MeshStandardMaterial({ color: 0x424242, metalness: 0.6 });
+      const stack = new THREE.Mesh(stackGeo, stackMat);
+      stack.position.x = (i - 1) * 1.2;
+      stack.position.y = cfg.height * 0.9;
+      stack.castShadow = true;
+      group.add(stack);
+    }
+  }
+  
+  return group;
+}
+
+function canPlaceBuilding(tile, type) {
+  const cfg = BUILDINGS[type];
+  const gridX = tile.userData.gridX;
+  const gridZ = tile.userData.gridZ;
+  
+  for (let x = 0; x < cfg.size; x++) {
+    for (let z = 0; z < cfg.size; z++) {
+      const checkTile = tileMap.get(`${gridX + x},${gridZ + z}`);
+      if (!checkTile || checkTile.userData.building) {
+        return false;
+      }
+    }
+  }
+  
+  return state.credits >= cfg.cost;
+}
+
+function placeBuilding(tile, type) {
+  if (!canPlaceBuilding(tile, type)) {
+    toast('Cannot place building here!');
+    return;
+  }
+  
+  const cfg = BUILDINGS[type];
+  const gridX = tile.userData.gridX;
+  const gridZ = tile.userData.gridZ;
+  
+  state.credits -= cfg.cost;
+  
+  const mesh = createBuildingMesh(type);
+  const centerX = (gridX + cfg.size / 2 - 0.5) * TILE_SIZE + TILE_SIZE / 2;
+  const centerZ = (gridZ + cfg.size / 2 - 0.5) * TILE_SIZE + TILE_SIZE / 2;
+  mesh.position.set(centerX, 0, centerZ);
+  scene.add(mesh);
+  
+  const building = {
+    type,
+    mesh,
+    tiles: [],
+    prod: { ...cfg.prod }
+  };
+  
+  for (let x = 0; x < cfg.size; x++) {
+    for (let z = 0; z < cfg.size; z++) {
+      const occupiedTile = tileMap.get(`${gridX + x},${gridZ + z}`);
+      if (occupiedTile) {
+        occupiedTile.userData.building = building;
+        building.tiles.push(occupiedTile);
+      }
+    }
+  }
+  
+  state.buildings.push(building);
+  updateHUD();
+  toast(`Built ${cfg.name}!`, 1000);
+  updateInfo(cfg.name, `Cost: ${cfg.cost} credits. Now managing ${state.buildings.length} buildings.`);
+}
+
+function removeBuilding(tile) {
+  const building = tile.userData.building;
+  if (!building) {
+    toast('No building here!');
+    return;
+  }
+  
+  scene.remove(building.mesh);
+  
+  building.tiles.forEach(t => {
+    t.userData.building = null;
+  });
+  
+  const index = state.buildings.indexOf(building);
+  if (index > -1) {
+    state.buildings.splice(index, 1);
+  }
+  
+  const cfg = BUILDINGS[building.type];
+  state.credits += Math.floor(cfg.cost * 0.5);
+  
+  updateHUD();
+  toast(`Removed ${cfg.name}. Refunded ${Math.floor(cfg.cost * 0.5)} credits.`, 1200);
+}
+
+function updateHoverEffect() {
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(tiles);
+  
+  if (hoveredTile) {
+      // Clear old hover effect
+      // Use the selectedType's size, or default to 1 if no type is selected
+      const oldType = state.selectedType || 'road'; // Use 'road' as a 1x1 default
+      const oldCfg = BUILDINGS[oldType];
+      
+      for (let x = 0; x < oldCfg.size; x++) {
+          for (let z = 0; z < oldCfg.size; z++) {
+              const checkTile = tileMap.get(`${hoveredTile.userData.gridX + x},${hoveredTile.userData.gridZ + z}`);
+              if (checkTile) {
+                  checkTile.material.opacity = 0;
+              }
+          }
+      }
+  }
+  
+  if (intersects.length > 0 && state.selectedType) {
+    const tile = intersects[0].object;
+    const cfg = BUILDINGS[state.selectedType];
+    const canPlace = canPlaceBuilding(tile, state.selectedType);
+    const color = canPlace ? 0x00ff00 : 0xff0000;
+    
+    for (let x = 0; x < cfg.size; x++) {
+      for (let z = 0; z < cfg.size; z++) {
+        const checkTile = tileMap.get(`${tile.userData.gridX + x},${tile.userData.gridZ + z}`);
+        if (checkTile) {
+          checkTile.material.color.setHex(color);
+          checkTile.material.opacity = 0.4;
+        }
+      }
+    }
+    
+    hoveredTile = tile;
+  } else {
+    hoveredTile = null;
+  }
+}
+
+function calculateProduction() {
+  let totalEnergy = 0;
+  let totalEnergyProd = 0;
+  let totalFood = 0;
+  let totalWater = 0;
+  let totalCredits = 0;
+  let totalResearch = 0;
+  let totalPop = 0;
+  
+  state.buildings.forEach(building => {
+    const prod = building.prod;
+    
+    if (prod.energy) {
+      if (prod.energy > 0) totalEnergyProd += prod.energy;
+      else totalEnergy += prod.energy;
+    }
+    if (prod.food) totalFood += prod.food;
+    if (prod.water) totalWater += prod.water;
+    if (prod.credits) totalCredits += prod.credits;
+    if (prod.research) totalResearch += prod.research;
+    if (prod.pop) totalPop += prod.pop;
+  });
+  
+  state.energyCap = totalEnergyProd;
+  state.energy = Math.max(0, Math.min(state.energyCap, state.energy + totalEnergy));
+  state.food = Math.max(0, state.food + totalFood);
+  state.water = Math.max(0, state.water + totalWater);
+  state.credits += totalCredits;
+  state.research += totalResearch;
+  state.pop = totalPop;
+  
+  if (state.energy <= 0 && totalEnergy < 0) {
+    toast('⚠️ POWER SHORTAGE!', 2000);
+  }
+  if (state.food <= 0) {
+    toast('⚠️ FOOD SHORTAGE!', 2000);
+  }
+  if (state.water <= 0) {
+    toast('⚠️ WATER SHORTAGE!', 2000);
+  }
+  
+  updateHUD();
+}
+
+// ========== ANIMATION LOOP ==========
+let lastTime = performance.now();
+
+function animate(currentTime) {
+  requestAnimationFrame(animate);
+  
+  const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
+  lastTime = currentTime;
+  
+  // FPS
+  state.fpsBuf.push(1 / deltaTime);
+  if (state.fpsBuf.length > 30) state.fpsBuf.shift();
+  UI.fps.textContent = Math.round(state.fpsBuf.reduce((a, b) => a + b) / state.fpsBuf.length);
+  
+  if (!state.started) {
+    // Animate menu screen
+    if (stars) stars.rotation.y += deltaTime * 0.02;
+    if (renderer) renderer.render(scene, camera);
+    if (controls) controls.update(); // Allow camera move on start screen
+    return;
+  }
+  
+  if (!state.paused) {
+    state.time += deltaTime;
+    state.lastTick += deltaTime;
+    
+    // Production tick every 5 seconds
+    if (state.lastTick >= 5) {
+      state.lastTick = 0;
+      state.day++;
+      calculateProduction();
+    }
+    
+    // Animate spaceships
+    updateSpaceships(deltaTime);
+    
+    // Animate buildings
+    state.buildings.forEach(building => {
+      if (building.type === 'solar') {
+        building.mesh.rotation.y += deltaTime * 0.15;
+      }
+      if (building.type === 'reactor') {
+        building.mesh.children.forEach(child => {
+          if (child.material && child.material.emissive) {
+            child.material.emissiveIntensity = 0.3 + Math.sin(state.time * 2) * 0.15;
+          }
+        });
+      }
+      if (building.type === 'lab') {
+        const dish = building.mesh.children.find(c => c.geometry.type === 'SphereGeometry');
+        if (dish) {
+          dish.rotation.y += deltaTime * 0.3;
+        }
+      }
+      if (building.type === 'spaceport') {
+        building.mesh.children.forEach(child => {
+          if (child.material && child.material.emissive && child.geometry.type === 'SphereGeometry') {
+            child.material.emissiveIntensity = 0.7 + Math.sin(state.time * 4 + child.position.x * 10) * 0.3;
+          }
+        });
+      }
+      if (building.type === 'factory') {
+        // Rotate smokestacks slightly
+        building.mesh.children.forEach(child => {
+          if (child.geometry.type === 'CylinderGeometry' && child.position.y > 1) {
+            child.rotation.y += deltaTime * 0.1;
+          }
+        });
+      }
+    });
+    
+    // Rotate stars
+    if (stars) stars.rotation.y += deltaTime * 0.005;
+    
+    // Update hover
+    updateHoverEffect();
+  }
+  
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+
+// ========== NEW: INITIALIZATION & ERROR HANDLING ==========
+
+let gameReady = false;
+
+// 1. ATTACH UI LISTENERS FIRST
+// These will be active even if the 3D game fails to load.
+try {
+  // Build buttons
+  document.querySelectorAll('.build-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!state.started) {
+        toast('Launch the mission first!', 1000);
+        return;
+      }
+      const type = btn.dataset.type;
+      state.selectedType = type;
+      
+      document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      
+      const cfg = BUILDINGS[type];
+      updateInfo(`Selected: ${cfg.name}`, `Cost: ${cfg.cost} credits. Click on the grid to place.`);
+      toast(`Selected ${cfg.name}`, 1000);
+    });
+  });
+
+  // Start button
+  UI.startBtn.addEventListener('click', () => {
+    if (!gameReady) {
+      // Game failed to load, show an error message
+      document.body.innerHTML = `<div style="color:white;padding:30px;font-family:sans-serif;font-size:18px;">
+        <h2>🔴 Game Failed to Load</h2>
+        <p>Could not initialize the 3D environment.</p>
+        <p>This is often caused by an internet issue preventing <strong>three.js</strong> from loading.</p>
+        <p>Please check your internet connection and refresh the page.</p>
+      </div>`;
+      return;
+    }
+    
+    // Game is ready, start the mission
+    console.log('Start button clicked!');
+    UI.startScreen.style.display = 'none';
+    state.started = true;
+    updateHUD();
+    toast('Colony established! Start building!', 2500);
+  });
+  
+  console.log('UI Listeners attached successfully.');
+
+} catch (e) {
+  console.error('Fatal Error: Could not attach UI listeners.', e);
+  document.body.innerHTML = 'Fatal Error: Could not initialize UI.';
+}
+
+
+// 2. TRY TO INITIALIZE THE 3D GAME
+try {
+  // ========== THREE.JS SETUP ==========
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050510);
+  scene.fog = new THREE.Fog(0x1a0f0f, 60, 250);
+
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(40, 50, 40);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  console.log('Renderer created');
+
+  // ========== ORBIT CONTROLS ==========
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 20;
+  controls.maxDistance = 150;
+  controls.maxPolarAngle = Math.PI / 2.1;
+  controls.target.set(0, 0, 0);
+
+  // ========== LIGHTING ==========
+  const ambientLight = new THREE.AmbientLight(0xffccaa, 0.4);
+  scene.add(ambientLight);
+
+  const sunLight = new THREE.DirectionalLight(0xffd4a3, 1.8);
+  sunLight.position.set(80, 120, 60);
+  sunLight.castShadow = true;
+  sunLight.shadow.camera.left = -80;
+  sunLight.shadow.camera.right = 80;
+  sunLight.shadow.camera.top = 80;
+  sunLight.shadow.camera.bottom = -80;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  scene.add(sunLight);
+
+  const fillLight = new THREE.DirectionalLight(0x4488ff, 0.4);
+  fillLight.position.set(-50, 30, -50);
+  scene.add(fillLight);
+
+  // ========== SPACE BACKGROUND ==========
+  const starGeometry = new THREE.BufferGeometry();
+  const starVertices = [];
+  for (let i = 0; i < 5000; i++) {
+    const x = (Math.random() - 0.5) * 800;
+    const y = Math.random() * 400 + 50;
+    const z = (Math.random() - 0.5) * 800;
+    starVertices.push(x, y, z);
+  }
+  starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+  const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, transparent: true, opacity: 0.8 });
+  stars = new THREE.Points(starGeometry, starMaterial);
+  scene.add(stars);
+
+  const moonGeo = new THREE.SphereGeometry(15, 32, 32);
+  const moonMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+  const moon = new THREE.Mesh(moonGeo, moonMat);
+  moon.position.set(-200, 100, -300);
+  scene.add(moon);
+
+  // ========== MARS TERRAIN ==========
+  const groundSize = 150;
+  const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize, 80, 80);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x8b4513,
+    roughness: 0.95,
+    metalness: 0.05
+  });
+
+  const positions = groundGeo.attributes.position;
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const y = positions.getY(i);
+    const noise = Math.sin(x * 0.08) * Math.cos(y * 0.08) * 1.2 + Math.sin(x * 0.2) * 0.5;
+    positions.setZ(i, noise);
+  }
+  groundGeo.computeVertexNormals();
+
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  for (let i = 0; i < 50; i++) {
+    const rockSize = 0.5 + Math.random() * 2;
+    const rockGeo = new THREE.DodecahedronGeometry(rockSize, 0);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.95 });
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.position.set(
+      (Math.random() - 0.5) * groundSize * 0.9,
+      rockSize / 2,
+      (Math.random() - 0.5) * groundSize * 0.9
+    );
+    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    scene.add(rock);
+  }
+
+  // ========== GRID ==========
+  const GRID_SIZE = 40;
+  const TILE_SIZE = 3;
+  
+  const gridHelper = new THREE.GridHelper(GRID_SIZE * TILE_SIZE, GRID_SIZE, 0x555555, 0x333333);
+  gridHelper.position.y = 0.02;
+  scene.add(gridHelper);
+
+  const tileGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.95, TILE_SIZE * 0.95);
+  const tileMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, side: THREE.DoubleSide });
+
+  for (let x = -GRID_SIZE / 2; x < GRID_SIZE / 2; x++) {
+    for (let z = -GRID_SIZE / 2; z < GRID_SIZE / 2; z++) {
+      const tile = new THREE.Mesh(tileGeo, tileMat.clone());
+      tile.rotation.x = -Math.PI / 2;
+      tile.position.set(x * TILE_SIZE + TILE_SIZE / 2, 0.05, z * TILE_SIZE + TILE_SIZE / 2);
+      tile.userData = { gridX: x, gridZ: z, building: null };
+      scene.add(tile);
+      tiles.push(tile);
+      tileMap.set(`${x},${z}`, tile);
+    }
+  }
+  console.log('Grid created with', tiles.length, 'tiles');
+
+  // ========== SPACESHIPS ==========
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => createSpaceship(), i * 3000);
+  }
+  
+  // ========== 3D INPUT LISTENERS ==========
+  window.addEventListener('mousemove', (e) => {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  });
+
+  window.addEventListener('click', (e) => {
+    if (!state.started || e.target.tagName === 'BUTTON') return;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(tiles);
+    
+    if (intersects.length > 0) {
+      const tile = intersects[0].object;
+      
+      if (state.selectedType) {
+        placeBuilding(tile, state.selectedType);
+      }
+    }
+  });
+
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    state.selectedType = null;
+    document.querySelectorAll('.build-btn').forEach(btn => btn.classList.remove('selected'));
+    toast('Selection cancelled', 800);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape') {
+      state.selectedType = null;
+      document.querySelectorAll('.build-btn').forEach(btn => btn.classList.remove('selected'));
+      toast('Selection cancelled', 800);
+    }
+    
+    if (e.code === 'Delete') {
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(tiles);
+      if (intersects.length > 0) {
+        removeBuilding(intersects[0].object);
+      }
+    }
+    
+    if (e.code === 'Space') {
+      camera.position.set(40, 50, 40);
+      controls.target.set(0, 0, 0);
+    }
+  });
+  
+  // ========== RESIZE ==========
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  
+  // ========== START GAME ==========
+  console.log('3D Scene Initialized.');
+  updateHUD();
+  animate(performance.now());
+  console.log('Game loop started');
+  
+  // If we get here, the game is ready!
+  gameReady = true;
+
+} catch (e) {
+  // 3D initialization failed!
+  console.error('Failed to initialize 3D game:', e);
+  // gameReady remains false.
+  // The UI.startBtn click listener will now handle showing the error.
+}
+
+})();
+  </script>
