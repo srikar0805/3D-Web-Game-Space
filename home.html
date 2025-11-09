@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mars Games Hub - Space Adventures</title>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(135deg, #0a0510 0%, #1e0f0a 50%, #0f0a15 100%);
+  color: #fff;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Animated starfield background */
+#stars {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.star {
+  position: absolute;
+  background: white;
+  border-radius: 50%;
+  animation: twinkle 3s infinite;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* Main container */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+/* Header */
+header {
+  text-align: center;
+  margin-bottom: 60px;
+  animation: fadeInDown 1s ease-out;
+}
+
+header h1 {
+  font-size: 72px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #ff6432, #ff9068, #ffd4a3);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 60px rgba(255, 100, 50, 0.5);
+  margin-bottom: 20px;
+  letter-spacing: 2px;
+}
+
+header p {
+  font-size: 24px;
+  color: #ccc;
+  max-width: 800px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* Games grid */
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 40px;
+  margin-bottom: 60px;
+}
+
+/* Game card */
+.game-card {
+  background: linear-gradient(135deg, rgba(20, 15, 30, 0.95), rgba(30, 20, 25, 0.95));
+  border: 3px solid rgba(255, 100, 50, 0.6);
+  border-radius: 20px;
+  padding: 30px;
+  transition: all 0.4s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  animation: fadeInUp 1s ease-out;
+}
+
+.game-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 100, 50, 0.1) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.game-card:hover::before {
+  opacity: 1;
+}
+
+.game-card:hover {
+  transform: translateY(-10px) scale(1.02);
+  border-color: #ff6432;
+  box-shadow: 0 20px 60px rgba(255, 100, 50, 0.4);
+}
+
+.game-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+  display: block;
+  text-align: center;
+  filter: drop-shadow(0 0 20px rgba(255, 100, 50, 0.6));
+  animation: float 3s ease-in-out infinite;
+}
+
+.game-card:nth-child(1) .game-icon {
+  animation-delay: 0s;
+}
+
+.game-card:nth-child(2) .game-icon {
+  animation-delay: 1.5s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-15px); }
+}
+
+.game-card h2 {
+  font-size: 36px;
+  color: #ff6432;
+  margin-bottom: 15px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.game-card .subtitle {
+  font-size: 18px;
+  color: #ffab91;
+  text-align: center;
+  margin-bottom: 20px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.game-card p {
+  font-size: 16px;
+  line-height: 1.8;
+  color: #ccc;
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+.features {
+  list-style: none;
+  margin-bottom: 30px;
+}
+
+.features li {
+  padding: 10px 0;
+  font-size: 15px;
+  color: #ddd;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.features li:last-child {
+  border-bottom: none;
+}
+
+.features li::before {
+  content: '✓';
+  color: #66bb6a;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.play-button {
+  display: block;
+  width: 100%;
+  padding: 18px;
+  background: linear-gradient(135deg, #ff6432, #d84315);
+  color: white;
+  text-decoration: none;
+  text-align: center;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  border: 3px solid #ffab91;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 25px rgba(255, 100, 50, 0.4);
+}
+
+.play-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(255, 100, 50, 0.6);
+  background: linear-gradient(135deg, #ff7850, #ff6432);
+}
+
+.play-button:active {
+  transform: scale(0.98);
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+  font-size: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  animation: fadeIn 2s ease-out;
+}
+
+footer a {
+  color: #ff6432;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+footer a:hover {
+  color: #ffab91;
+}
+
+/* Animations */
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  header h1 {
+    font-size: 48px;
+  }
+  
+  header p {
+    font-size: 18px;
+  }
+  
+  .games-grid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  
+  .game-card h2 {
+    font-size: 28px;
+  }
+  
+  .game-icon {
+    font-size: 60px;
+  }
+}
+
+/* Shooting stars */
+.shooting-star {
+  position: fixed;
+  width: 2px;
+  height: 2px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.8);
+  animation: shoot 3s linear infinite;
+  opacity: 0;
+}
+
+@keyframes shoot {
+  0% {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-300px) translateY(300px);
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- Starfield background -->
+<div id="stars"></div>
+
+<!-- Shooting stars -->
+<div class="shooting-star" style="top: 10%; left: 80%; animation-delay: 0s;"></div>
+<div class="shooting-star" style="top: 30%; left: 60%; animation-delay: 2s;"></div>
+<div class="shooting-star" style="top: 50%; left: 90%; animation-delay: 4s;"></div>
+<div class="shooting-star" style="top: 70%; left: 40%; animation-delay: 6s;"></div>
+
+<div class="container">
+  <header>
+    <h1>🚀 MARS GAMES HUB</h1>
+    <p>Choose your adventure: Build a thriving colony on Mars or defend the galaxy in an epic space battle!</p>
+  </header>
+
+  <div class="games-grid">
+    
+    <!-- Mars Colony Builder -->
+    <div class="game-card" onclick="window.location.href='mars-town.html'">
+      <span class="game-icon">🏗️</span>
+      <h2>Mars Town Builder</h2>
+      <div class="subtitle">City Building Simulator</div>
+      <p>Build and manage a thriving colony on the Red Planet. Place habitats, farms, power plants, and spaceports while managing resources to keep your colonists alive!</p>
+      
+      <ul class="features">
+        <li>Colorful 3D buildings with shadows</li>
+        <li>Simple and intuitive controls</li>
+        <li>Beautiful Mars atmosphere</li>
+        <li>7+ building types to construct</li>
+        <li>Resource management (energy, food, water)</li>
+        <li>Easy camera controls (WASD + zoom)</li>
+      </ul>
+      
+      <a href="mars-town.html" class="play-button">🎮 Play Now</a>
+    </div>
+
+    <!-- Space Shooter -->
+    <div class="game-card" onclick="window.location.href='space_rafter.html'">
+      <span class="game-icon">🚀</span>
+      <h2>Space Rafter</h2>
+      <div class="subtitle">3D Space Shooter</div>
+      <p>Pilot the XR-Δ ship through dangerous space! Use your time-bending abilities to slow down enemies and rewind mistakes in this fast-paced 3D shooter.</p>
+      
+      <ul class="features">
+        <li>Time-dilation warp ability</li>
+        <li>Rewind mechanic to undo damage</li>
+        <li>3 challenging levels with boss fight</li>
+        <li>NASA starfield backgrounds</li>
+        <li>Power-ups and shield pickups</li>
+        <li>Gamepad support included</li>
+      </ul>
+      
+      <a href="space_rafter.html" class="play-button">🎮 Play Now</a>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>Built with ❤️ using Three.js | No installation required - just click and play!</p>
+    <p>Textures: NASA/JPL-Caltech | Sound Effects: Mixkit/Freesound</p>
+    <p style="margin-top: 20px;">
+      <a href="README.md" target="_blank">📖 View Full Documentation</a>
+    </p>
+  </footer>
+</div>
+
+<script>
+// Generate random stars
+const starsContainer = document.getElementById('stars');
+const starCount = 200;
+
+for (let i = 0; i < starCount; i++) {
+  const star = document.createElement('div');
+  star.className = 'star';
+  
+  const size = Math.random() * 3;
+  star.style.width = size + 'px';
+  star.style.height = size + 'px';
+  star.style.left = Math.random() * 100 + '%';
+  star.style.top = Math.random() * 100 + '%';
+  star.style.animationDelay = Math.random() * 3 + 's';
+  star.style.animationDuration = (2 + Math.random() * 3) + 's';
+  
+  starsContainer.appendChild(star);
+}
+
+// Add click sound effect (optional)
+document.querySelectorAll('.play-button').forEach(button => {
+  button.addEventListener('click', (e) => {
+    // Visual feedback
+    button.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      button.style.transform = 'scale(1.05)';
+    }, 100);
+  });
+});
+
+// Parallax effect on mouse move
+document.addEventListener('mousemove', (e) => {
+  const moveX = (e.clientX - window.innerWidth / 2) * 0.01;
+  const moveY = (e.clientY - window.innerHeight / 2) * 0.01;
+  
+  document.querySelectorAll('.game-card').forEach((card, index) => {
+    const multiplier = (index + 1) * 0.5;
+    card.style.transform = `translate(${moveX * multiplier}px, ${moveY * multiplier}px)`;
+  });
+});
+
+// Reset transform on mouse leave
+document.addEventListener('mouseleave', () => {
+  document.querySelectorAll('.game-card').forEach(card => {
+    card.style.transform = 'translate(0, 0)';
+  });
+});
+
+console.log('🚀 Mars Games Hub loaded successfully!');
+console.log('Choose your adventure and start playing!');
+</script>
+
+</body>
+</html>
